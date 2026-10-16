@@ -70,7 +70,7 @@ export const MapView = forwardRef<MapHandle, Props>(function MapView(
 
   function shareUrl() {
     const map = mapRef.current;
-    const center = map?.getCenter() || initialView;
+    const center = map?.getCenter().wrap() || initialView;
     const params = new URLSearchParams({
       lat: center.lat.toFixed(6),
       lng: center.lng.toFixed(6),
@@ -81,6 +81,23 @@ export const MapView = forwardRef<MapHandle, Props>(function MapView(
       params.set("plng", selectionRef.current.lng.toFixed(6));
     }
     return `${window.location.origin}${window.location.pathname}#${params}`;
+  }
+
+  function keepSelectionVisible() {
+    const map = mapRef.current;
+    const point = selectionRef.current;
+    if (!map || !point) return;
+    const { clientWidth: width, clientHeight: height } = map.getContainer();
+    if (!width || !height) return;
+    const position = map.project([point.lng, point.lat]);
+    if (
+      position.x < 30 ||
+      position.x > width - 30 ||
+      position.y < 60 ||
+      position.y > height - 30
+    ) {
+      map.jumpTo({ center: [point.lng, point.lat] });
+    }
   }
 
   useImperativeHandle(ref, () => ({
@@ -188,12 +205,13 @@ export const MapView = forwardRef<MapHandle, Props>(function MapView(
         );
     });
     map.on("zoomend", updateStatus);
+    map.on("resize", keepSelectionVisible);
     map.on("moveend", () => {
       history.replaceState(null, "", shareUrl());
     });
     map.on("click", (event) => {
       callbacks.current.onSelect({
-        lng: event.lngLat.lng,
+        lng: event.lngLat.wrap().lng,
         lat: event.lngLat.lat,
         label: "Selected point",
         approximate: false,
@@ -230,6 +248,7 @@ export const MapView = forwardRef<MapHandle, Props>(function MapView(
             ? 0
             : 900,
         });
+      else keepSelectionVisible();
     }
     history.replaceState(null, "", shareUrl());
   }, [selection]);
