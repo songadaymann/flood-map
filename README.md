@@ -1,5 +1,7 @@
 # Flood Map
 
+[Open the live map](https://flood-map.novox-robot.workers.dev)
+
 A simple, free FEMA flood-zone lookup. Search a US street address, use your location, or tap the map. The map starts in West Hartford, Connecticut and works across available US NFHL coverage.
 
 Built with React, MapLibre GL JS, OpenFreeMap, the US Census Geocoder, and FEMA's live National Flood Hazard Layer. The app and its small API run together on a Cloudflare Worker. No API keys, account signup, database, or paid map service is required.
