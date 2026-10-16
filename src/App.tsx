@@ -129,7 +129,15 @@ export default function App() {
         approximate: false,
         fly: false,
       });
+    // Internal map moves use replaceState. A hashchange is an opened share
+    // link; initialize its view and selected point together from a fresh page.
+    const openSharedLocation = (event: HashChangeEvent) => {
+      history.replaceState(null, "", event.newURL);
+      window.location.reload();
+    };
+    window.addEventListener("hashchange", openSharedLocation);
     return () => {
+      window.removeEventListener("hashchange", openSharedLocation);
       searchController.current?.abort();
       floodController.current?.abort();
     };
