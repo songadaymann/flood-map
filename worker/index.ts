@@ -8,73 +8,8 @@ import {
 import { tileExportUrl } from "./tiles";
 import { imageryExportUrl } from "./imagery";
 
-class UpstreamError extends Error {}
-
-async function fetchUpstream(
-  url: string,
-  timeoutMs = 14000,
-): Promise<Response> {
-  for (let attempt = 0; attempt < 2; attempt++) {
-    try {
-      const response = await fetch(url, {
-        signal: AbortSignal.timeout(timeoutMs),
-        headers: {
-          Accept: "application/json,image/png",
-          "User-Agent":
-            "FloodMap/1.0 (+https://github.com/songadaymann/flood-map)",
-        },
-      });
-      if (response.ok) return response;
-      console.warn({
-        event: "upstream_http_error",
-        host: new URL(url).hostname,
-        status: response.status,
-      });
-      await response.body?.cancel();
-      if (response.status < 500)
-        throw new UpstreamError("The data service rejected the request.");
-    } catch (error) {
-      if (error instanceof UpstreamError || attempt === 1)
-        throw new UpstreamError("The data service is temporarily unavailable.");
-    }
-  }
-  throw new UpstreamError("The data service is temporarily unavailable.");
-}
-
-async function readJson<T>(response: Response): Promise<T> {
-  if (!response.headers.get("content-type")?.includes("json")) {
-    await response.body?.cancel();
-    throw new UpstreamError(
-      "The data service returned an unexpected response.",
-    );
-  }
-  // These endpoints return a few attributes, never geometry or full datasets.
-  const reader = response.body?.getReader();
-  if (!reader) throw new UpstreamError("The data service returned no data.");
-  let length = 0;
-  const chunks: Uint8Array[] = [];
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    length += value.length;
-    if (length > 1_000_000) {
-      await reader.cancel();
-      throw new UpstreamError("The data response was too large.");
-    }
-    chunks.push(value);
-  }
-  const bytes = new Uint8Array(length);
-  let offset = 0;
-  for (const chunk of chunks) {
-    bytes.set(chunk, offset);
-    offset += chunk.length;
-  }
-  try {
-    return JSON.parse(new TextDecoder().decode(bytes)) as T;
-  } catch {
-    throw new UpstreamError("The data service returned invalid data.");
-  }
-}
+import { UpstreamError, fetchUpstream, readJson } from "./upstream";
+import { nearbyRivers, riverConditions } from "./rivers";
 
 async function queryPoint<T>(
   layer: number,
@@ -176,6 +111,22 @@ export default {
             lat: match.coordinates.y,
           }));
         return jsonResponse({ matches, provider: "US Census Bureau" });
+      }
+      if (url.pathname === "/api/rivers") {
+        const point = readPoint(url.searchParams);
+        if (!point)
+          return jsonResponse(
+            { error: "Provide valid longitude and latitude." },
+            400,
+          );
+        return jsonResponse(await nearbyRivers(point.lng, point.lat, ctx));
+      }
+      const river = url.pathname.match(/^\/api\/rivers\/([^/]+)$/);
+      if (river) {
+        const id = river[1].toUpperCase();
+        if (!/^[A-Z0-9]{3,12}$/.test(id))
+          return jsonResponse({ error: "Invalid NOAA gauge identifier." }, 400);
+        return jsonResponse(await riverConditions(id, ctx));
       }
       if (url.pathname === "/api/flood") {
         const point = readPoint(url.searchParams);
@@ -280,11 +231,13 @@ export default {
       // Deliberately omit addresses, coordinates, and upstream request URLs from logs.
       return jsonResponse(
         {
-          error: url.pathname.startsWith("/api/imagery/")
-            ? "Aerial imagery is unavailable right now. Switch to Map or try again."
-            : url.pathname === "/api/search"
-              ? "Address search is unavailable right now. Please try again, or tap the map."
-              : "FEMA is unavailable right now. Please retry or open the official FEMA map.",
+          error: url.pathname.startsWith("/api/rivers")
+            ? "NOAA river conditions are unavailable right now. Please try again."
+            : url.pathname.startsWith("/api/imagery/")
+              ? "Aerial imagery is unavailable right now. Switch to Map or try again."
+              : url.pathname === "/api/search"
+                ? "Address search is unavailable right now. Please try again, or tap the map."
+                : "FEMA is unavailable right now. Please retry or open the official FEMA map.",
         },
         503,
       );

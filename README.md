@@ -10,6 +10,8 @@ Use **Map / Satellite** to compare the selected point and flood boundaries with 
 
 Results show the effective FEMA map date and any floodway designation. When FEMA supplies them in the selected zone's attributes, the app also shows base flood elevation, its unit and vertical datum, average mapped flood depth, and study type. Missing elevation data is never estimated from nearby zones. Flood elevation is a water-surface elevation relative to a reference datum; comparing it with a house requires a surveyed building elevation in the same datum.
 
+**River conditions nearby** adds NOAA / National Weather Service gauge readings and official river forecasts in one compact disclosure below the FEMA result. The nearest gauge is selected automatically; a dropdown offers up to five gauges within 25 miles. Each gauge has its river name, distance, observation time, and official NOAA link. When available, the expanded view shows flood stage and the highest remaining official forecast, its time, forecast horizon, and issuance time. Some gauges report observations without an active forecast. These are conditions at the gauge, not flood depths or forecasts for a house; nearby gauges may be in different watersheds.
+
 ## Run locally
 
 Requires Node.js 22.12 or newer and npm.
@@ -42,6 +44,9 @@ Choose a unique Worker name in `wrangler.jsonc` when deploying your own copy. Wr
 - [Census geocoder](https://geocoding.geo.census.gov/geocoder/Geocoding_Services_API.html): full US street addresses only. Searches happen on submission, not every keystroke. Census positions are interpolated along street ranges, not surveyed building or parcel locations. Tap a building to refine the selected point.
 - [OpenFreeMap](https://openfreemap.org/quick_start/) and [OpenStreetMap](https://www.openstreetmap.org/copyright): the basemap. The map retains provider attribution. MapLibre is the open-source renderer.
 - [USGS NAIP Imagery](https://imagery.nationalmap.gov/arcgis/rest/services/USGSNAIPImagery/ImageServer) supplies aerial detail, rendered in Web Mercator tile extents through a bounded proxy and cached at Cloudflare for up to 24 hours. [USGS Imagery Only](https://basemap.nationalmap.gov/arcgis/rest/services/USGSImageryOnly/MapServer) supplies overview imagery. Credits remain visible; imagery is fetched only in Satellite mode.
+- [NOAA National Water Prediction Service API](https://api.water.noaa.gov/nwps/v1/docs/): bounded regional gauge discovery through `/gauges?bbox.*&srid=EPSG_4326`, gauge metadata through `/gauges/{id}`, and the official forecast product through `/gauges/{id}/stageflow/forecast`. Discovery is cached for five minutes; gauge products for two minutes. The browser refreshes every five minutes while visible and rechecks when returning to an older tab. NOAA failures are independent of FEMA; a failed forecast does not erase a valid observation. The app never substitutes National Water Model output for an official forecast.
+
+River observations older than six hours and forecasts issued more than 48 hours ago are marked out of date. These conservative display rules are local app choices, not NOAA publication guarantees. NOAA's own not-current flags also take precedence. Missing values, units, timestamps, flood thresholds, and forecasts are not invented; `-999` and `-9999` sentinels are excluded while legitimate zero and negative gauge levels remain valid. A forecast high uses only remaining future values and is compared with a flood threshold only when the units match. A gauge reading uses that gauge's reference and cannot be compared directly with FEMA base flood elevation or a building's floor.
 
 A zone result describes **one point**, not an entire property. Zones A/V and the SFHA flag identify high mapped flood hazard. Zone X is interpreted with its subtype; an unlabeled X is never assumed to be minimal hazard. Zone B may include moderate-hazard conditions beyond the 0.2% floodplain. Overlapping polygons use a conservative category and remain visible in map details. Zone D, missing polygons, failed queries, and truncated responses never become a low-hazard result.
 
@@ -53,7 +58,7 @@ FEMA maps do not represent every cause of flooding or predict current weather. F
 
 ## Privacy
 
-No accounts, analytics, database, or application search history. The Worker forwards addresses to Census and coordinates/tile extents to FEMA. The basemap provider receives normal map requests. Third-party providers and the hosting platform may retain normal operational logs. Application warnings omit addresses, point coordinates, and full upstream URLs. Share links store coordinates in the URL fragment and omit the address text; the coordinates are visible to anyone receiving the link.
+No accounts, analytics, database, or application search history. The Worker forwards addresses to Census and coordinates/tile extents to FEMA and USGS. NOAA receives a regional bounding box for nearby gauges and gauge identifiers for river products. The basemap provider receives normal map requests. Third-party providers and the hosting platform may retain normal operational logs. Application warnings omit addresses, point coordinates, and full upstream URLs. Share links store coordinates in the URL fragment and omit the address text; the coordinates are visible to anyone receiving the link.
 
 ## Project layout
 

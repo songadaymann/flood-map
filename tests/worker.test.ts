@@ -21,6 +21,9 @@ test("Invalid inputs are rejected before any upstream call", async () => {
       "/api/imagery/12/4096/0.png",
       "/api/tiles/9/512/0.png",
       "/api/search?q=x",
+      "/api/rivers",
+      "/api/rivers?lat=90&lng=0",
+      "/api/rivers/invalid%20id",
     ])
       assert.equal((await request(path)).status, 400, path);
     assert.equal(mocked.mock.callCount(), 0);

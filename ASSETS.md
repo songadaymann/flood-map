@@ -17,6 +17,8 @@ The original wave favicon (`public/favicon.svg`) is CC BY 4.0, credit Jonathan M
 
 Map data is fetched from the providers and is not bundled or relicensed as MIT. No web fonts are downloaded or vendored; the interface uses system fonts.
 
+River observations, flood thresholds, gauge metadata, and official river forecasts are loaded at runtime from the [NOAA National Water Prediction Service API](https://api.water.noaa.gov/nwps/v1/docs/). NOAA / National Weather Service attribution and a direct gauge link are retained in the interface. Observation partners, such as USGS, are credited on the official gauge page. No NOAA images or datasets are bundled or relicensed as MIT.
+
 Satellite view streams USGS / USDA imagery from these public services; no imagery source files are included in this repository:
 
 - [USGS NAIP Imagery](https://imagery.nationalmap.gov/arcgis/rest/services/USGSNAIPImagery/ImageServer): high-resolution public-domain federal aerial imagery in the contiguous United States, via `worker/imagery.ts`. Provider credits are shown on the map. Capture dates and detail vary.

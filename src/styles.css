@@ -17,7 +17,8 @@ body {
   margin: 0;
 }
 button,
-input {
+input,
+select {
   font: inherit;
 }
 button,
@@ -38,6 +39,7 @@ a {
 button:focus-visible,
 a:focus-visible,
 input:focus-visible,
+select:focus-visible,
 summary:focus-visible {
   outline: 3px solid #287da4;
   outline-offset: 3px;
@@ -347,6 +349,120 @@ a:hover {
 }
 .map-details dt {
   color: var(--muted);
+}
+.river-conditions {
+  margin-top: 20px;
+  border-top: 1px solid var(--rule);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.river-conditions summary {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  list-style: none;
+  cursor: pointer;
+  padding: 16px 0 10px;
+}
+.river-conditions summary::-webkit-details-marker {
+  display: none;
+}
+.river-conditions summary strong {
+  font-weight: 600;
+}
+.river-preview {
+  display: grid;
+  gap: 4px;
+  padding-top: 8px;
+  color: var(--muted);
+}
+.river-preview > span {
+  display: block;
+}
+.river-preview svg {
+  vertical-align: -2px;
+  margin-right: 6px;
+}
+.river-conditions[open] summary > svg {
+  transform: rotate(180deg);
+}
+.river-conditions[open] .river-preview {
+  display: none;
+}
+.river-body label {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--muted);
+}
+.river-body select {
+  width: 100%;
+  min-width: 0;
+  color: var(--ink);
+  background: var(--paper);
+  border: 1px solid #a6b4a0;
+  border-radius: 0;
+  padding: 10px 24px 10px 8px;
+  font-size: 13px;
+}
+.river-body select + p {
+  margin-top: 8px;
+}
+.river-loading {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding-top: 10px;
+}
+.river-facts {
+  margin: 16px 0;
+}
+.river-facts > div {
+  display: grid;
+  grid-template-columns: 88px minmax(0, 1fr);
+  gap: 10px;
+  border-top: 1px solid var(--rule);
+  padding: 10px 0;
+}
+.river-facts dt {
+  color: var(--muted);
+}
+.river-facts dd {
+  margin: 0;
+}
+.river-facts dd > * {
+  display: block;
+}
+.river-facts dd > strong {
+  font-size: 16px;
+  font-weight: 600;
+}
+.river-caution {
+  color: #9a382b;
+  font-weight: 600;
+}
+.river-note {
+  border-left: 2px solid #a6b4a0;
+  padding-left: 10px;
+}
+.river-source {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 14px;
+}
+.river-refresh {
+  margin-top: 12px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.river-update-note {
+  margin-top: 10px;
+}
+@media (max-width: 760px) {
+  .river-body select {
+    font-size: 16px;
+  }
 }
 .map-details dd {
   margin: 0;

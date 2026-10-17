@@ -33,6 +33,7 @@ import {
   type Basemap,
 } from "./flood";
 import PointDetails from "./PointDetails";
+import RiverConditions from "./RiverConditions";
 
 async function api<T>(path: string, signal: AbortSignal): Promise<T> {
   const response = await fetch(path, { signal });
@@ -487,6 +488,11 @@ export default function App() {
                     </details>
                   </div>
                 )}
+                <RiverConditions
+                  key={`${selection.lng},${selection.lat}`}
+                  lng={selection.lng}
+                  lat={selection.lat}
+                />
                 <div className="result-links">
                   <a
                     href={officialMapUrl(selection.lng, selection.lat)}
@@ -661,7 +667,7 @@ export default function App() {
         <p>
           Flood Map makes FEMA’s current effective flood zones easier to look
           up. It is an independent, open-source project and is not affiliated
-          with FEMA.
+          with FEMA or NOAA.
         </p>
         <h3>Where the data comes from</h3>
         <ul className="source-list">
@@ -679,6 +685,23 @@ export default function App() {
               map became effective, not when it was checked. Preliminary maps
               and individual Letters of Map Amendment are not included in the
               zone lookup.
+            </p>
+          </li>
+          <li>
+            <a href="https://water.noaa.gov" target="_blank" rel="noreferrer">
+              NOAA / National Weather Service <ExternalLink size={14} />
+            </a>
+            <p>
+              Nearby river conditions use the National Water Prediction Service.
+              Up to five gauges within 25 miles are listed by straight-line
+              distance, starting with the nearest. They may be on different
+              rivers or in different watersheds. Readings and official forecasts
+              describe the gauge, not the selected property. Some gauges have no
+              active forecast. National Water Model estimates are not included.
+              NOAA data is cached for up to five minutes and refreshes while the
+              tab is visible. Readings over six hours old and forecasts issued
+              over 48 hours ago are marked out of date; these are this app’s
+              display rules, not NOAA update guarantees.
             </p>
           </li>
           <li>
@@ -736,8 +759,9 @@ export default function App() {
         <p>
           No accounts, analytics, or saved search history. Addresses go to the
           Census Bureau; map and zone requests go to their providers through
-          Cloudflare. Share links contain coordinates in the URL fragment, not
-          an address.
+          Cloudflare. NOAA receives a regional area for nearby gauges and gauge
+          identifiers for river conditions. Share links contain coordinates in
+          the URL fragment, not an address.
         </p>
         <a
           className="source-link"
