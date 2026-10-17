@@ -1,6 +1,14 @@
 export const FEMA_SERVICE =
   "https://hazards.fema.gov/arcgis/rest/services/public/NFHL/MapServer";
 export const MAP_STYLE = "https://tiles.openfreemap.org/styles/positron";
+export const IMAGERY_SERVICE =
+  "https://imagery.nationalmap.gov/arcgis/rest/services/USGSNAIPImagery/ImageServer";
+export const IMAGERY_OVERVIEW_TILES =
+  "https://basemap.nationalmap.gov/arcgis/rest/services/USGSImageryOnly/MapServer/tile/{z}/{y}/{x}";
+export type Basemap = "map" | "satellite";
+export function readBasemap(params: URLSearchParams): Basemap {
+  return params.get("view") === "satellite" ? "satellite" : "map";
+}
 export const SOURCE_REPO = "https://github.com/songadaymann/flood-map";
 export const DEFAULT_VIEW = { lng: -72.746, lat: 41.762, zoom: 12.8 };
 
@@ -12,6 +20,8 @@ export interface ZoneAttributes {
   STATIC_BFE?: number | null;
   V_DATUM?: string | null;
   LEN_UNIT?: string | null;
+  DEPTH?: number | null;
+  STUDY_TYP?: string | null;
 }
 export interface PanelAttributes {
   FIRM_PAN?: string | null;
@@ -156,4 +166,64 @@ export function formatSubtype(value: string | null | undefined): string {
     .toLowerCase()
     .replace(/\b(pct|percent)\b/g, "%")
     .replace(/^./, (letter) => letter.toUpperCase());
+}
+
+export interface FloodMeasure {
+  kind: "elevation" | "depth";
+  value: number;
+  unit: "ft" | "m" | null;
+  datum: string | null;
+  zone: string;
+}
+
+export function publishedFloodMeasures(
+  zones: ZoneAttributes[],
+): FloodMeasure[] {
+  const measures: FloodMeasure[] = [];
+  const valid = (value: unknown): value is number =>
+    typeof value === "number" &&
+    Number.isFinite(value) &&
+    value > -9999 &&
+    value !== -8888;
+  for (const zone of zones) {
+    const rawUnit = zone.LEN_UNIT?.trim().toUpperCase();
+    const unit = ["FT", "FEET", "FOOT"].includes(rawUnit || "")
+      ? "ft"
+      : ["M", "METERS", "METRES", "METER", "METRE"].includes(rawUnit || "")
+        ? "m"
+        : null;
+    const rawDatum = zone.V_DATUM?.trim();
+    const datum =
+      !rawDatum || rawDatum === "<Null>"
+        ? null
+        : rawDatum
+            .replace(/^NAVD\s*88$/i, "NAVD 88")
+            .replace(/^NGVD\s*29$/i, "NGVD 29");
+    if (valid(zone.STATIC_BFE))
+      measures.push({
+        kind: "elevation",
+        value: zone.STATIC_BFE,
+        unit,
+        datum,
+        zone: zone.FLD_ZONE || "Unspecified",
+      });
+    if (valid(zone.DEPTH) && zone.DEPTH > 0)
+      measures.push({
+        kind: "depth",
+        value: zone.DEPTH,
+        unit,
+        datum: null,
+        zone: zone.FLD_ZONE || "Unspecified",
+      });
+  }
+  return measures.filter(
+    (measure, index, all) =>
+      all.findIndex(
+        (other) =>
+          other.kind === measure.kind &&
+          other.value === measure.value &&
+          other.unit === measure.unit &&
+          other.datum === measure.datum,
+      ) === index,
+  );
 }

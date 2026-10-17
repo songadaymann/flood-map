@@ -17,6 +17,8 @@ test("Invalid inputs are rejected before any upstream call", async () => {
       "/api/flood?lat=&lng=",
       "/api/flood?lat=90&lng=0",
       "/api/tiles/25/1/1.png",
+      "/api/imagery/20/1/1.png",
+      "/api/imagery/12/4096/0.png",
       "/api/tiles/9/512/0.png",
       "/api/search?q=x",
     ])
@@ -108,5 +110,77 @@ test("A transient network error is retried once and a valid response is retained
     );
   } finally {
     mocked.mock.restore();
+  }
+});
+
+test("Aerial imagery rejects upstream JSON errors and streams valid images with caching", async () => {
+  const descriptor = Object.getOwnPropertyDescriptor(globalThis, "caches");
+  const stored: Response[] = [];
+  Object.defineProperty(globalThis, "caches", {
+    configurable: true,
+    value: {
+      open: async () => ({
+        match: async () => undefined,
+        put: async (_key: Request, response: Response) => {
+          stored.push(response);
+        },
+      }),
+    },
+  });
+  const pending: Promise<unknown>[] = [];
+  const context: ExecutionContext = {
+    ...ctx,
+    waitUntil(promise) {
+      pending.push(promise);
+    },
+  };
+  try {
+    const badFetch = mock.method(globalThis, "fetch", async () =>
+      json({ error: { code: 500 } }),
+    );
+    try {
+      assert.equal(
+        (
+          await worker.fetch(
+            new Request("https://flood.example/api/imagery/18/78091/97534.png"),
+            env,
+            context,
+          )
+        ).status,
+        503,
+      );
+      assert.equal(badFetch.mock.callCount(), 1);
+      assert.equal(stored.length, 0);
+    } finally {
+      badFetch.mock.restore();
+    }
+    const pixels = new Uint8Array([137, 80, 78, 71]);
+    const goodFetch = mock.method(
+      globalThis,
+      "fetch",
+      async () =>
+        new Response(pixels, { headers: { "Content-Type": "image/png" } }),
+    );
+    try {
+      const response = await worker.fetch(
+        new Request("https://flood.example/api/imagery/18/78091/97534.png"),
+        env,
+        context,
+      );
+      assert.equal(response.status, 200);
+      assert.equal(response.headers.get("Content-Type"), "image/png");
+      assert.equal(
+        response.headers.get("Cache-Control"),
+        "public, max-age=86400",
+      );
+      assert.deepEqual(new Uint8Array(await response.arrayBuffer()), pixels);
+      await Promise.all(pending);
+      assert.equal(stored.length, 1);
+    } finally {
+      goodFetch.mock.restore();
+    }
+  } finally {
+    if (descriptor) Object.defineProperty(globalThis, "caches", descriptor);
+    else Reflect.deleteProperty(globalThis, "caches");
   }
 });

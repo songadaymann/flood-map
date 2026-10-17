@@ -116,3 +116,67 @@ test("FEMA tile bounding boxes align exactly between neighboring tiles", () => {
     ),
   );
 });
+
+test("Published flood elevations retain real zero/negative levels but exclude missing data", async () => {
+  const { publishedFloodMeasures } = await import("../src/flood");
+  const values = publishedFloodMeasures([
+    { FLD_ZONE: "AE", STATIC_BFE: 0, LEN_UNIT: "FEET", V_DATUM: "NAVD88" },
+    { FLD_ZONE: "VE", STATIC_BFE: -2.5, LEN_UNIT: "METERS", V_DATUM: "NGVD29" },
+    { STATIC_BFE: -9999 },
+    { STATIC_BFE: -8888 },
+    { STATIC_BFE: NaN },
+    { STATIC_BFE: Infinity },
+    { STATIC_BFE: null },
+    {},
+  ]);
+  assert.deepEqual(
+    values.map((value) => [value.value, value.unit, value.datum]),
+    [
+      [0, "ft", "NAVD 88"],
+      [-2.5, "m", "NGVD 29"],
+    ],
+  );
+});
+test("Flood depth is distinct from elevation; absent units and datums are never guessed", async () => {
+  const { publishedFloodMeasures } = await import("../src/flood");
+  const values = publishedFloodMeasures([
+    { FLD_ZONE: "AO", DEPTH: 2, STATIC_BFE: 123 },
+    { DEPTH: -9999 },
+    { DEPTH: 0 },
+  ]);
+  assert.deepEqual(
+    values.map((value) => [value.kind, value.value, value.unit, value.datum]),
+    [
+      ["elevation", 123, null, null],
+      ["depth", 2, null, null],
+    ],
+  );
+});
+test("Overlapping zones preserve conflicting measurements and remove exact duplicates", async () => {
+  const { publishedFloodMeasures } = await import("../src/flood");
+  const values = publishedFloodMeasures([
+    { STATIC_BFE: 10, LEN_UNIT: "FEET", V_DATUM: "NAVD88" },
+    { STATIC_BFE: 10, LEN_UNIT: "FEET", V_DATUM: "NAVD88" },
+    { STATIC_BFE: 11, LEN_UNIT: "FEET", V_DATUM: "NGVD29" },
+  ]);
+  assert.equal(values.length, 2);
+  assert.notEqual(values[0].datum, values[1].datum);
+});
+test("Satellite share mode accepts only the known basemap value", async () => {
+  const { readBasemap } = await import("../src/flood");
+  assert.equal(readBasemap(new URLSearchParams("view=satellite")), "satellite");
+  assert.equal(readBasemap(new URLSearchParams("view=unknown")), "map");
+  assert.equal(readBasemap(new URLSearchParams()), "map");
+});
+test("Aerial tiles use the same geographic extents as the flood overlay", async () => {
+  const { imageryExportUrl } = await import("../worker/imagery");
+  const url = new URL(imageryExportUrl(18, 78091, 97534));
+  assert.equal(url.hostname, "imagery.nationalmap.gov");
+  assert.equal(
+    url.searchParams.get("bbox"),
+    tileBounds(18, 78091, 97534).join(","),
+  );
+  assert.equal(url.searchParams.get("bboxSR"), "3857");
+  assert.equal(url.searchParams.get("imageSR"), "3857");
+  assert.equal(url.searchParams.get("size"), "512,512");
+});

@@ -17,9 +17,11 @@ import {
 import {
   MapView,
   initialPoint,
+  initialBasemap,
   type MapHandle,
   type OverlayStatus,
   type Selection,
+  type ImageryStatus,
 } from "./MapView";
 import {
   SOURCE_REPO,
@@ -28,7 +30,9 @@ import {
   summarizeZones,
   type AddressMatch,
   type FloodResponse,
+  type Basemap,
 } from "./flood";
+import PointDetails from "./PointDetails";
 
 async function api<T>(path: string, signal: AbortSignal): Promise<T> {
   const response = await fetch(path, { signal });
@@ -73,6 +77,8 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [lookupError, setLookupError] = useState("");
   const [overlay, setOverlay] = useState(true);
+  const [basemap, setBasemap] = useState<Basemap>(initialBasemap);
+  const [imageryStatus, setImageryStatus] = useState<ImageryStatus>("loading");
   const [overlayStatus, setOverlayStatus] = useState<OverlayStatus>("loading");
   const [mapError, setMapError] = useState("");
   const [locating, setLocating] = useState(false);
@@ -408,13 +414,7 @@ export default function App() {
                       <p className="zone-code">Zone {summary.zone}</p>
                     )}
                     <p className="zone-explanation">{summary.explanation}</p>
-                    {data.zones.some((zone) =>
-                      /FLOODWAY/.test(zone.ZONE_SUBTY || ""),
-                    ) && (
-                      <p className="small emphasis">
-                        This point is also in a mapped floodway.
-                      </p>
-                    )}
+                    <PointDetails data={data} />
                     {data.zones.length > 1 && (
                       <p className="small emphasis">
                         {data.zones.length} FEMA polygons overlap here. The
@@ -442,6 +442,15 @@ export default function App() {
                             <dd>
                               {zone.FLD_ZONE || "Unspecified"} ·{" "}
                               {formatSubtype(zone.ZONE_SUBTY)}
+                              {zone.STUDY_TYP &&
+                                zone.STUDY_TYP !== "<Null>" && (
+                                  <>
+                                    <br />
+                                    <span className="muted">
+                                      Study: {zone.STUDY_TYP.toLowerCase()}
+                                    </span>
+                                  </>
+                                )}
                             </dd>
                           </div>
                         ))}
@@ -548,11 +557,33 @@ export default function App() {
             ref={map}
             selection={selection}
             showOverlay={overlay}
+            basemap={basemap}
             onSelect={(point) => void selectPoint(point)}
             onStatus={setOverlayStatus}
             onMapError={setMapError}
+            onImageryStatus={setImageryStatus}
           />
           <div className="map-topline">
+            <div className="basemap-switch" role="group" aria-label="Basemap">
+              <button
+                aria-pressed={basemap === "map"}
+                onClick={() => {
+                  setBasemap("map");
+                  setCopied(false);
+                }}
+              >
+                Map
+              </button>
+              <button
+                aria-pressed={basemap === "satellite"}
+                onClick={() => {
+                  setBasemap("satellite");
+                  setCopied(false);
+                }}
+              >
+                Satellite
+              </button>
+            </div>
             <button
               className={`overlay-button ${overlay ? "active" : ""}`}
               aria-pressed={overlay}
@@ -566,7 +597,7 @@ export default function App() {
             </button>
           </div>
           <div
-            className={`map-status ${overlayStatus === "error" || mapError ? "map-status-error" : ""}`}
+            className={`map-status ${overlayStatus === "error" || mapError || (basemap === "satellite" && imageryStatus === "error") ? "map-status-error" : ""}`}
             role="status"
           >
             {mapError ? (
@@ -576,10 +607,22 @@ export default function App() {
                 <span>FEMA overlay unavailable</span>
                 <button onClick={() => map.current?.retry()}>Retry</button>
               </>
+            ) : basemap === "satellite" && imageryStatus === "error" ? (
+              <>
+                <span>Some aerial imagery could not load</span>
+                <button onClick={() => map.current?.retryImagery()}>
+                  Retry
+                </button>
+              </>
             ) : overlayStatus === "loading" ? (
               <>
                 <LoaderCircle size={14} className="spin" />
                 <span>Loading FEMA flood zones…</span>
+              </>
+            ) : basemap === "satellite" && imageryStatus === "loading" ? (
+              <>
+                <LoaderCircle size={14} className="spin" />
+                <span>Loading satellite imagery…</span>
               </>
             ) : overlayStatus === "zoom" ? (
               <button onClick={() => map.current?.zoomIn()}>
@@ -650,6 +693,23 @@ export default function App() {
               US street-address search. Matches are estimated from street ranges
               and may land beside a building. Tap the building to refine the
               point.
+            </p>
+          </li>
+          <li>
+            <a
+              href="https://imagery.nationalmap.gov/arcgis/rest/services/USGSNAIPImagery/ImageServer"
+              target="_blank"
+              rel="noreferrer"
+            >
+              USGS / USDA aerial imagery <ExternalLink size={14} />
+            </a>
+            <p>
+              Satellite view uses aerial photography from The National Map:
+              high-resolution NAIP imagery in the contiguous US, and the USGS
+              overview basemap elsewhere. Capture dates and detail vary; the
+              photos are not live. Detailed imagery is cached for up to 24
+              hours. Imagery and flood boundaries may be offset, so use a survey
+              for property-boundary decisions.
             </p>
           </li>
           <li>

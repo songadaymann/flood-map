@@ -813,3 +813,56 @@ a:hover {
     min-height: 280px;
   }
 }
+.map-topline {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+.basemap-switch {
+  display: flex;
+  border: 1px solid #b7c1b0;
+  background: var(--paper);
+  box-shadow: 0 2px 5px #c4c9bf;
+}
+.basemap-switch button {
+  padding: 11px 15px;
+  font-size: 13px;
+  min-height: 40px;
+}
+.basemap-switch button + button {
+  border-left: 1px solid #b7c1b0;
+}
+.basemap-switch button[aria-pressed="true"] {
+  background: var(--ink);
+  color: #fff;
+}
+.basemap-switch button[aria-pressed="false"]:hover {
+  background: #edf1e2;
+}
+.point-details {
+  margin-top: 18px;
+}
+.point-facts {
+  margin: 0;
+  padding: 12px 0 0;
+  border-top: 1px solid var(--rule);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.point-facts > div {
+  display: grid;
+  grid-template-columns: 98px minmax(0, 1fr);
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.point-facts dt {
+  color: var(--muted);
+}
+.point-facts dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.fact-note {
+  margin-top: 10px;
+}

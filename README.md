@@ -6,6 +6,10 @@ A simple, free FEMA flood-zone lookup. Search a US street address, use your loca
 
 Built with React, MapLibre GL JS, OpenFreeMap, the US Census Geocoder, and FEMA's live National Flood Hazard Layer. The app and its small API run together on a Cloudflare Worker. No API keys, account signup, database, or paid map service is required.
 
+Use **Map / Satellite** to compare the selected point and flood boundaries with USGS/USDA aerial photography. The pin, zoom, and flood layer stay in place while switching; shared links preserve satellite mode. Detailed imagery is available in the contiguous US, with a lower-resolution USGS overview elsewhere. Imagery dates vary and the photos are not live. Photographs and flood boundaries can be offset; they do not establish a surveyed property boundary.
+
+Results show the effective FEMA map date and any floodway designation. When FEMA supplies them in the selected zone's attributes, the app also shows base flood elevation, its unit and vertical datum, average mapped flood depth, and study type. Missing elevation data is never estimated from nearby zones. Flood elevation is a water-surface elevation relative to a reference datum; comparing it with a house requires a surveyed building elevation in the same datum.
+
 ## Run locally
 
 Requires Node.js 22.12 or newer and npm.
@@ -37,6 +41,7 @@ Choose a unique Worker name in `wrangler.jsonc` when deploying your own copy. Wr
 - [FEMA NFHL service](https://hazards.fema.gov/arcgis/rest/services/public/NFHL/MapServer): layer **28** supplies flood-zone polygons; layer **3** supplies effective FIRM panel dates. Point queries use exact polygon intersections with `inSR=4326`; no distance buffer is used. The public endpoint is configurable in `src/flood.ts`.
 - [Census geocoder](https://geocoding.geo.census.gov/geocoder/Geocoding_Services_API.html): full US street addresses only. Searches happen on submission, not every keystroke. Census positions are interpolated along street ranges, not surveyed building or parcel locations. Tap a building to refine the selected point.
 - [OpenFreeMap](https://openfreemap.org/quick_start/) and [OpenStreetMap](https://www.openstreetmap.org/copyright): the basemap. The map retains provider attribution. MapLibre is the open-source renderer.
+- [USGS NAIP Imagery](https://imagery.nationalmap.gov/arcgis/rest/services/USGSNAIPImagery/ImageServer) supplies aerial detail, rendered in Web Mercator tile extents through a bounded proxy and cached at Cloudflare for up to 24 hours. [USGS Imagery Only](https://basemap.nationalmap.gov/arcgis/rest/services/USGSImageryOnly/MapServer) supplies overview imagery. Credits remain visible; imagery is fetched only in Satellite mode.
 
 A zone result describes **one point**, not an entire property. Zones A/V and the SFHA flag identify high mapped flood hazard. Zone X is interpreted with its subtype; an unlabeled X is never assumed to be minimal hazard. Zone B may include moderate-hazard conditions beyond the 0.2% floodplain. Overlapping polygons use a conservative category and remain visible in map details. Zone D, missing polygons, failed queries, and truncated responses never become a low-hazard result.
 

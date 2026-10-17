@@ -17,6 +17,11 @@ The original wave favicon (`public/favicon.svg`) is CC BY 4.0, credit Jonathan M
 
 Map data is fetched from the providers and is not bundled or relicensed as MIT. No web fonts are downloaded or vendored; the interface uses system fonts.
 
+Satellite view streams USGS / USDA imagery from these public services; no imagery source files are included in this repository:
+
+- [USGS NAIP Imagery](https://imagery.nationalmap.gov/arcgis/rest/services/USGSNAIPImagery/ImageServer): high-resolution public-domain federal aerial imagery in the contiguous United States, via `worker/imagery.ts`. Provider credits are shown on the map. Capture dates and detail vary.
+- [USGS Imagery Only](https://basemap.nationalmap.gov/arcgis/rest/services/USGSImageryOnly/MapServer): overview imagery and coverage outside the NAIP detail footprint. This service includes partner imagery with its own restrictions, including licensed Alaska imagery. Stream for display with USGS/USDA attribution; no offline export or source redistribution is provided by this project.
+
 ## 3. Licensed (paid or restricted): not included
 
 None.

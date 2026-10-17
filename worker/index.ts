@@ -6,14 +6,18 @@ import {
   type ZoneAttributes,
 } from "../src/flood";
 import { tileExportUrl } from "./tiles";
+import { imageryExportUrl } from "./imagery";
 
 class UpstreamError extends Error {}
 
-async function fetchUpstream(url: string): Promise<Response> {
+async function fetchUpstream(
+  url: string,
+  timeoutMs = 14000,
+): Promise<Response> {
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
       const response = await fetch(url, {
-        signal: AbortSignal.timeout(14000),
+        signal: AbortSignal.timeout(timeoutMs),
         headers: {
           Accept: "application/json,image/png",
           "User-Agent":
@@ -185,7 +189,7 @@ export default {
             28,
             point.lng,
             point.lat,
-            "FLD_ZONE,ZONE_SUBTY,SFHA_TF,DFIRM_ID,STATIC_BFE,V_DATUM,LEN_UNIT",
+            "FLD_ZONE,ZONE_SUBTY,SFHA_TF,DFIRM_ID,STATIC_BFE,V_DATUM,LEN_UNIT,DEPTH,STUDY_TYP",
           ),
           queryPoint<PanelAttributes>(
             3,
@@ -202,6 +206,36 @@ export default {
             panelResult.status === "fulfilled" ? "available" : "unavailable",
           checkedAt: new Date().toISOString(),
         });
+      }
+      const imageryTile = url.pathname.match(
+        /^\/api\/imagery\/(\d+)\/(\d+)\/(\d+)\.png$/,
+      );
+      if (imageryTile) {
+        const [z, x, y] = imageryTile.slice(1).map(Number);
+        if (z < 12 || z > 19 || x < 0 || y < 0 || x >= 2 ** z || y >= 2 ** z)
+          return jsonResponse({ error: "Invalid imagery tile." }, 400);
+        const cache = await caches.open("usgs-imagery-v2");
+        const cacheKey = new Request(`${url.origin}${url.pathname}`, {
+          method: "GET",
+        });
+        const cached = await cache.match(cacheKey);
+        if (cached) return cached;
+        const upstream = await fetchUpstream(imageryExportUrl(z, x, y), 20000);
+        if (!upstream.headers.get("content-type")?.includes("image/png")) {
+          await upstream.body?.cancel();
+          throw new UpstreamError("USGS could not render the aerial imagery.");
+        }
+        const response = new Response(upstream.body, {
+          headers: {
+            "Content-Type": "image/png",
+            "Cache-Control": "public, max-age=86400",
+            "X-Content-Type-Options": "nosniff",
+          },
+        });
+        ctx.waitUntil(
+          cache.put(cacheKey, response.clone()).catch(() => undefined),
+        );
+        return response;
       }
       const tile = url.pathname.match(
         /^\/api\/tiles\/(\d+)\/(\d+)\/(\d+)\.png$/,
@@ -246,8 +280,9 @@ export default {
       // Deliberately omit addresses, coordinates, and upstream request URLs from logs.
       return jsonResponse(
         {
-          error:
-            url.pathname === "/api/search"
+          error: url.pathname.startsWith("/api/imagery/")
+            ? "Aerial imagery is unavailable right now. Switch to Map or try again."
+            : url.pathname === "/api/search"
               ? "Address search is unavailable right now. Please try again, or tap the map."
               : "FEMA is unavailable right now. Please retry or open the official FEMA map.",
         },

@@ -6,14 +6,25 @@ import {
   NavigationControl,
   ScaleControl,
   setWorkerUrl,
+  setMaxParallelImageRequests,
   type MapSourceDataEvent,
   type RasterTileSource,
+  type SymbolLayerSpecification,
 } from "maplibre-gl";
 import workerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
-import { DEFAULT_VIEW, MAP_STYLE, readPoint } from "./flood";
+import {
+  DEFAULT_VIEW,
+  MAP_STYLE,
+  IMAGERY_OVERVIEW_TILES,
+  readPoint,
+  readBasemap,
+  type Basemap,
+} from "./flood";
 import "maplibre-gl/dist/maplibre-gl.css";
 
 setWorkerUrl(workerUrl);
+// Avoid bursts of image exports against the public mapping services.
+setMaxParallelImageRequests(4);
 
 export interface Selection {
   lng: number;
@@ -23,12 +34,15 @@ export interface Selection {
   fly: boolean;
 }
 export type OverlayStatus = "loading" | "ready" | "error" | "zoom" | "hidden";
+export type ImageryStatus = "loading" | "ready" | "error";
 export interface MapHandle {
   shareUrl: () => string;
   retry: () => void;
   zoomIn: () => void;
+  retryImagery: () => void;
 }
 const initialParams = new URLSearchParams(window.location.hash.slice(1));
+export const initialBasemap = readBasemap(initialParams);
 export const initialView = readPoint(initialParams) || DEFAULT_VIEW;
 const parsedZoom = Number(initialParams.get("z"));
 export const initialZoom =
@@ -48,13 +62,23 @@ export const initialPoint = readPoint(
 interface Props {
   selection: Selection | null;
   showOverlay: boolean;
+  basemap: Basemap;
   onSelect: (point: Selection) => void;
   onStatus: (status: OverlayStatus) => void;
   onMapError: (error: string) => void;
+  onImageryStatus: (status: ImageryStatus) => void;
 }
 
 export const MapView = forwardRef<MapHandle, Props>(function MapView(
-  { selection, showOverlay, onSelect, onStatus, onMapError },
+  {
+    selection,
+    showOverlay,
+    basemap,
+    onSelect,
+    onStatus,
+    onMapError,
+    onImageryStatus,
+  },
   ref,
 ) {
   const container = useRef<HTMLDivElement>(null);
@@ -62,11 +86,17 @@ export const MapView = forwardRef<MapHandle, Props>(function MapView(
   const markerRef = useRef<Marker | null>(null);
   const selectionRef = useRef(selection);
   const overlayRef = useRef(showOverlay);
+  const basemapRef = useRef(basemap);
+  const imageryFailed = useRef(false);
+  const labelPaints = useRef<
+    { id: string; paint: SymbolLayerSpecification["paint"] }[]
+  >([]);
   const failed = useRef(false);
-  const callbacks = useRef({ onSelect, onStatus, onMapError });
-  callbacks.current = { onSelect, onStatus, onMapError };
+  const callbacks = useRef({ onSelect, onStatus, onMapError, onImageryStatus });
+  callbacks.current = { onSelect, onStatus, onMapError, onImageryStatus };
   selectionRef.current = selection;
   overlayRef.current = showOverlay;
+  basemapRef.current = basemap;
 
   function shareUrl() {
     const map = mapRef.current;
@@ -80,6 +110,7 @@ export const MapView = forwardRef<MapHandle, Props>(function MapView(
       params.set("plat", selectionRef.current.lat.toFixed(6));
       params.set("plng", selectionRef.current.lng.toFixed(6));
     }
+    if (basemapRef.current === "satellite") params.set("view", "satellite");
     return `${window.location.origin}${window.location.pathname}#${params}`;
   }
 
@@ -100,6 +131,46 @@ export const MapView = forwardRef<MapHandle, Props>(function MapView(
     }
   }
 
+  function updateImageryStatus() {
+    const map = mapRef.current;
+    if (!map || basemapRef.current !== "satellite") return;
+    callbacks.current.onImageryStatus(
+      imageryFailed.current
+        ? "error"
+        : map.getSource("aerial-detail") &&
+            map.isSourceLoaded("aerial-detail") &&
+            map.isSourceLoaded("aerial-overview")
+          ? "ready"
+          : "loading",
+    );
+  }
+
+  function applyBasemap() {
+    const map = mapRef.current;
+    if (!map?.getLayer("aerial-detail")) return;
+    const satellite = basemapRef.current === "satellite";
+    for (const id of ["aerial-overview", "aerial-detail"])
+      map.setLayoutProperty(id, "visibility", satellite ? "visible" : "none");
+    for (const { id, paint } of labelPaints.current) {
+      map.setPaintProperty(
+        id,
+        "text-color",
+        satellite ? "#ffffff" : (paint?.["text-color"] ?? "#000000"),
+      );
+      map.setPaintProperty(
+        id,
+        "text-halo-color",
+        satellite ? "#173e43" : (paint?.["text-halo-color"] ?? "#ffffff"),
+      );
+      map.setPaintProperty(
+        id,
+        "text-halo-width",
+        satellite ? 1.5 : (paint?.["text-halo-width"] ?? 0),
+      );
+    }
+    updateImageryStatus();
+  }
+
   useImperativeHandle(ref, () => ({
     shareUrl,
     retry() {
@@ -113,6 +184,21 @@ export const MapView = forwardRef<MapHandle, Props>(function MapView(
     },
     zoomIn() {
       mapRef.current?.zoomTo(12, { duration: 500 });
+    },
+    retryImagery() {
+      imageryFailed.current = false;
+      callbacks.current.onImageryStatus("loading");
+      for (const [id, tile] of [
+        ["aerial-overview", IMAGERY_OVERVIEW_TILES],
+        [
+          "aerial-detail",
+          `${window.location.origin}/api/imagery/{z}/{x}/{y}.png`,
+        ],
+      ]) {
+        const source = mapRef.current?.getSource(id) as
+          RasterTileSource | undefined;
+        source?.setTiles([`${tile}?retry=${Date.now()}`]);
+      }
     },
   }));
 
@@ -166,6 +252,46 @@ export const MapView = forwardRef<MapHandle, Props>(function MapView(
     }
     map.on("load", () => {
       callbacks.current.onMapError("");
+      const styleLayers = map.getStyle().layers;
+      labelPaints.current = styleLayers
+        .filter((layer) => layer.type === "symbol")
+        .map((layer) => ({ id: layer.id, paint: { ...layer.paint } }));
+      const firstLabel = styleLayers.find(
+        (layer) => layer.type === "symbol",
+      )?.id;
+      const attribution =
+        '<a href="https://www.usgs.gov/the-national-map-data-delivery" target="_blank" rel="noopener noreferrer">USGS / USDA aerial imagery</a>';
+      map.addSource("aerial-overview", {
+        type: "raster",
+        tiles: [IMAGERY_OVERVIEW_TILES],
+        tileSize: 256,
+        maxzoom: 16,
+        attribution,
+      });
+      map.addSource("aerial-detail", {
+        type: "raster",
+        tiles: [`${window.location.origin}/api/imagery/{z}/{x}/{y}.png?v=2`],
+        tileSize: 512,
+        minzoom: 12,
+        maxzoom: 19,
+        bounds: [-125, 24, -66, 50],
+        attribution,
+      });
+      for (const id of ["aerial-overview", "aerial-detail"])
+        map.addLayer(
+          {
+            id,
+            type: "raster",
+            source: id,
+            ...(id === "aerial-detail" ? { minzoom: 12 } : {}),
+            layout: {
+              visibility:
+                basemapRef.current === "satellite" ? "visible" : "none",
+            },
+            paint: { "raster-fade-duration": 0 },
+          },
+          firstLabel,
+        );
       map.addSource("fema", {
         type: "raster",
         tiles: [`${window.location.origin}/api/tiles/{z}/{x}/{y}.png`],
@@ -173,9 +299,6 @@ export const MapView = forwardRef<MapHandle, Props>(function MapView(
         minzoom: 9,
         maxzoom: 16,
       });
-      const firstLabel = map
-        .getStyle()
-        .layers.find((layer) => layer.type === "symbol")?.id;
       map.addLayer(
         {
           id: "fema-zones",
@@ -188,17 +311,32 @@ export const MapView = forwardRef<MapHandle, Props>(function MapView(
         firstLabel,
       );
       updateStatus();
+      applyBasemap();
     });
     map.on("sourcedata", (event: MapSourceDataEvent) => {
       if (event.sourceId === "fema") updateStatus();
+      if (event.sourceId?.startsWith("aerial-")) updateImageryStatus();
     });
     map.on("dataloading", (event) => {
       if ("sourceId" in event && event.sourceId === "fema") updateStatus();
+      if (
+        "sourceId" in event &&
+        typeof event.sourceId === "string" &&
+        event.sourceId.startsWith("aerial-")
+      )
+        updateImageryStatus();
     });
     map.on("error", (event) => {
       if ("sourceId" in event && event.sourceId === "fema") {
         failed.current = true;
         callbacks.current.onStatus("error");
+      } else if (
+        "sourceId" in event &&
+        typeof event.sourceId === "string" &&
+        event.sourceId.startsWith("aerial-")
+      ) {
+        imageryFailed.current = true;
+        callbacks.current.onImageryStatus("error");
       } else if (!map.isStyleLoaded())
         callbacks.current.onMapError(
           "The street map is unavailable. Address lookup still works.",
@@ -224,6 +362,11 @@ export const MapView = forwardRef<MapHandle, Props>(function MapView(
       mapRef.current = null;
     };
   }, []);
+
+  useEffect(() => {
+    applyBasemap();
+    history.replaceState(null, "", shareUrl());
+  }, [basemap]);
 
   useEffect(() => {
     const map = mapRef.current;
