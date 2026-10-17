@@ -176,6 +176,18 @@ test("Aerial imagery rejects upstream JSON errors and streams valid images with 
       assert.deepEqual(new Uint8Array(await response.arrayBuffer()), pixels);
       await Promise.all(pending);
       assert.equal(stored.length, 1);
+      const detailedFloodTile = await worker.fetch(
+        new Request("https://flood.example/api/tiles/18/78091/97534.png"),
+        env,
+        context,
+      );
+      assert.equal(detailedFloodTile.status, 200);
+      assert.equal(
+        detailedFloodTile.headers.get("Cache-Control"),
+        "public, max-age=900",
+      );
+      await Promise.all(pending);
+      assert.equal(stored.length, 2);
     } finally {
       goodFetch.mock.restore();
     }

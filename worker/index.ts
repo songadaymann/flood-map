@@ -242,7 +242,7 @@ export default {
       );
       if (tile) {
         const [z, x, y] = tile.slice(1).map(Number);
-        if (z < 9 || z > 16 || x < 0 || y < 0 || x >= 2 ** z || y >= 2 ** z)
+        if (z < 9 || z > 18 || x < 0 || y < 0 || x >= 2 ** z || y >= 2 ** z)
           return jsonResponse({ error: "Invalid map tile." }, 400);
         const cache = await caches.open("fema-overlay-v1");
         const cacheKey = new Request(`${url.origin}${url.pathname}`, {

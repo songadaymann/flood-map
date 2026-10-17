@@ -297,7 +297,7 @@ export const MapView = forwardRef<MapHandle, Props>(function MapView(
         tiles: [`${window.location.origin}/api/tiles/{z}/{x}/{y}.png`],
         tileSize: 256,
         minzoom: 9,
-        maxzoom: 16,
+        maxzoom: 18,
       });
       map.addLayer(
         {
